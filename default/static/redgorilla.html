@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+
+<html>
+<head>
+</head>
+<body>
+
+	<canvas id="c" width="200" height="200"></canvas>
+	
+	<script>
+var state = false;	
+
+function onclick(event) {
+    state = !state;
+}
+
+function copyImageData(ctx, src) {
+	var dst = ctx.createImageData(src.width, src.height);
+	dst.data.set(src.data);
+	return dst;
+}
+
+window.requestAnimFrame = (function(callback) {
+    
+    return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+    window.setTimeout(callback, 1000 / 10);
+})();
+
+function makeframe(originalImageData, canvas, context, startTime) {
+
+	var time = (new Date()).getTime() - startTime;
+	var imageData = copyImageData(context, originalImageData);
+	context.clearRect(0,0,canvas.width,canvas.height);
+	
+	for (var i = 0; i < imageData.data.length; i += 4) {
+		var r = imageData.data[i];
+		var g = imageData.data[i+1];
+		var b = imageData.data[i+2];
+		
+		var range_r = 127;
+		var range_g = 127;
+		var range_b = 127;
+		var rand_r = Math.floor(Math.random() * range_r + (state ? range_r : 0));
+		var rand_g = Math.floor(Math.random() * range_g + (state ? range_g : 0));
+		var rand_b = Math.floor(Math.random() * range_b + (state ? range_b : 0));
+		
+		imageData.data[i] = (r + rand_r) % 256;
+		imageData.data[i+1] = (g + rand_g) % 256;
+		imageData.data[i+2] = (b + rand_b) % 256;
+	}
+	
+	ctx.putImageData(imageData, 0, 0);
+	
+	requestAnimFrame(function() {
+  		makeframe(originalImageData, canvas, context, startTime);
+  	});
+}
+
+var c = document.querySelector("#c");
+var ctx = c.getContext("2d");
+var image = new Image();
+
+image.onload = function() {
+
+	c.width = image.width;
+	c.height = image.height;
+	
+	c.addEventListener("click", onclick, false);
+	
+	ctx.drawImage(image,0,0);
+	var originalImageData = ctx.getImageData(0,0,image.width,image.height);
+	var startTime = (new Date()).getTime();
+	
+	requestAnimFrame(function() {
+		makeframe(originalImageData, c, ctx, startTime);
+	});
+	
+}
+
+
+image.crossOrigin = 'anonymous';
+image.src = 'http://i.imgur.com/slHOJbY.png';
+		
+	</script>
+
+</body>
+</html>
