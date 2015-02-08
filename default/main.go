@@ -6,7 +6,9 @@ import (
 )
 
 func init() {
+
     r := mux.NewRouter()
     r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
     http.Handle("/", r)
 }
+

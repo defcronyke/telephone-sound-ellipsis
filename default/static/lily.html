@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+
+    <style>
+body {
+    background: black;
+}
+
+#c {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+}
+
+#v {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: -180px 0 0 -240px;
+    display: none;
+}
+    </style>
+
+</head>
+<body>
+    
+	<canvas id="c" width="200" height="200"></canvas>
+	
+	<video id="v" crossorigin="anonymous" loop autoplay>
+	    <source src="https://dl.dropboxusercontent.com/s/jbabpfxunof0zil/lily2.webm" type=video/webm>
+	</video>
+	
+	<script>
+var state = false;
+var norandframes = 0;
+
+function onclick(event) {
+    state = !state;
+}
+
+function copyImageData(ctx, src) {
+	var dst = ctx.createImageData(src.width, src.height);
+	dst.data.set(src.data);
+	return dst;
+}
+
+window.requestAnimFrame = (function(callback) {
+    
+    return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame ||
+    window.setTimeout(callback, 1000 / 60);
+})();
+
+function makeframe(v, c, ctx, startTime) {
+
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+
+    //if (norandframes < ((60 * 0.2)/2)) {
+    
+    norandframes = 60 * 0.2;
+
+    var time = (new Date()).getTime() - startTime;
+    //var imageData = copyImageData(context, originalImageData);
+    var imageData = ctx.getImageData(0, 0, c.width, c.height);
+    
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    var rand1 = Math.floor(Math.random() * 4);
+
+    for (var i = 0; i < imageData.data.length; i += 4) {
+        var r = imageData.data[i];
+        var g = imageData.data[i+1];
+        var b = imageData.data[i+2];
+
+        if (r > 40 && (rand1 == 0)) {
+            r = b+g + 1 + rand1 * rand1;
+        }
+        
+        if (g > 40 && (rand1 == 1)) {
+            g = r+b + 1 + rand1;
+        }
+        
+        if (b > 40 && (rand1 == 2)) {
+            b = g+r + 1 + rand1 * rand1;
+        }
+        
+        r = b%r+1+g*Math.floor(r/128);
+        g = r%g+1+b*Math.floor(g/64);
+        b = g%b+1+r*Math.floor(b/32);
+
+        imageData.data[i] = (r) % 256;
+        imageData.data[i+1] = (g) % 256;
+        imageData.data[i+2] = (b) % 256;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    
+    norandframes--;
+
+    requestAnimFrame(function() {
+  		makeframe(v, c, ctx, startTime);
+  	});
+}
+
+var v = document.getElementById('v');
+var c = document.querySelector("#c");
+var ctx = c.getContext("2d");
+
+v.addEventListener('play', function(){
+
+	c.width = v.videoWidth;
+	c.height = v.videoHeight;
+	
+	c.addEventListener("click", onclick, false);
+	
+	var startTime = (new Date()).getTime();
+	
+	requestAnimFrame(function() {
+		makeframe(v, c, ctx, startTime);
+	});
+});
+		
+	</script>
+
+</body>
+</html>
