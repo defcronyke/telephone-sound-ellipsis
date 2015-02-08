@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<title>WebGL Video Filter Example</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="css/base.css"/>
+</head>
+<body>
+
+<script src="js/three.min.js"></script>
+<script src="js/Detector.js"></script>
+<script src="js/Stats.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/THREEx.KeyboardState.js"></script>
+<script src="js/THREEx.FullScreen.js"></script>
+<script src="js/THREEx.WindowResize.js"></script>
+<script src="js/RenderPass.js"></script>
+<script src="js/MaskPass.js"></script>
+<script src="js/ShaderPass.js"></script>
+<script src="js/CopyShader.js"></script>
+<script src="js/EffectComposer.js"></script>
+
+<script src="shaders/live.js"></script>
+
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="js/jquery-1.9.1.js"></script>
+<script src="js/jquery-ui.js"></script>
+<link rel=stylesheet href="css/jquery-ui.css" />
+<link rel=stylesheet href="css/info.css"/>
+<script src="js/info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Demo Information">
+Demo controls:
+<ul>
+<li> P: play video
+<li> Space: pause video
+<li> S: stop video
+<li> R: rewind to beginning
+</ul>
+This three.js demo is part of a collection at
+<a href="http://stemkoski.github.io/Three.js/">http://stemkoski.github.io/Three.js/</a>
+</div>
+<!-- ------------------------------------------------------------ -->
+
+<div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
+<script>
+/*
+    Loosely based on:
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+*/
+	
+// MAIN
+
+// standard global variables
+var container, scene, camera, renderer, controls, stats;
+var keyboard = new THREEx.KeyboardState();
+
+// custom global variables
+var video, video2, videoImage, videoImage2, videoImageContext, videoImageContext2, videoTexture, videoTexture2;
+
+init();
+animate();
+
+// FUNCTIONS 		
+function init() 
+{
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(0,150,360);
+	//var look_at = new THREE.Vector3(0, 60, 200);
+	//camera.lookAt(scene.position);
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias: true, alpha: true} );
+	else
+		renderer = new THREE.CanvasRenderer(); 
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	renderer.setClearColor(0x44eeff, 1);
+	
+	container = document.getElementById( 'ThreeJS' );
+	
+	/*
+	// EffectComposer Example
+	composer = new THREE.EffectComposer(renderer);
+    composer.addPass( new THREE.RenderPass( scene, camera ) );
+    
+    var dotScreenEffect = new THREE.ShaderPass( THREE.DotScreenShader );
+    dotScreenEffect.uniforms[ 'scale' ].value = 4;
+    dotScreenEffect.renderToScreen = true;  // Last pass needs this set!!
+    composer.addPass( dotScreenEffect );
+    */
+	
+	container.appendChild( renderer.domElement );
+	// CONTROLS
+	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(0,250,0);
+	scene.add(light);
+	// FLOOR
+	THREE.ImageUtils.crossOrigin = "Anonymous";
+	var floorTexture = THREE.ImageUtils.loadTexture('http://i.imgur.com/XWHibMG.png');
+	//floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
+	//floorTexture.repeat.set( 10, 10 );
+	var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+	var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
+	var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+	floor.position.y = -0.5;
+	floor.rotation.x = Math.PI / 2;
+	scene.add(floor);
+	// SKYBOX/FOG
+	var skyBoxGeometry = new THREE.CubeGeometry( 10000, 10000, 10000 );
+	var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
+	var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+	// scene.add(skyBox);
+	scene.fog = new THREE.FogExp2( 0x9999ff, 0.00025 );
+	
+	
+	///////////
+	// VIDEO //
+	///////////
+	
+	// create the video element
+	video = document.createElement( 'video' );
+	// video.id = 'video';
+	// video.type = ' video/ogg; codecs="theora, vorbis" ';
+	//video.src = "videos/sintel.ogv";
+	video.crossOrigin = "anonymous";
+	video.loop = true;
+	video.defaultPlaybackRate = 0.6;
+	
+	
+	//var hasUserMedia = navigator.webkitGetUserMedia ? true : false; // has webcam support?
+
+
+    navigator.getUserMedia_ = (   navigator.getUserMedia
+                               || navigator.webkitGetUserMedia 
+                               || navigator.mozGetUserMedia 
+                               || navigator.msGetUserMedia);
+
+    if ( !! navigator.getUserMedia_) {
+        
+        //console.log(navigator.getSupportedConstraints())
+        
+        navigator.getUserMedia_({
+           video: {
+               optional: [
+                   { minWidth: 1280 },
+                   { minHeight: 720 }
+               ]
+           },
+           
+           audio: false
+        },
+        function(stream){
+            video.src = webkitURL.createObjectURL(stream);
+        }, 
+        function(error){
+            var msg = "Failed to get a stream due to", error;
+            console.log(msg);
+            video.src = "https://dl.dropboxusercontent.com/s/tgvsdgpyqniftkk/stock-explosion.webm";
+        });
+        
+        
+    } else {
+        console.log("Error: navigator.getUserMedia not found.");
+        
+    }
+    
+		
+	video.load(); // must call after setting/changing source
+	video.play();
+	
+	videoImage = document.createElement( 'canvas' );
+	videoImage.width = 1280;
+	videoImage.height = 720;
+	
+	var sizeMultiplier = 0.2;
+
+	videoImageContext = videoImage.getContext( '2d' );
+	// background color if no video present
+	videoImageContext.fillStyle = '#000000';
+	videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );
+	
+	
+
+	videoTexture = new THREE.Texture( videoImage );
+	videoTexture.minFilter = THREE.LinearFilter;
+	videoTexture.magFilter = THREE.LinearFilter;
+	
+	//var movieMaterial = new THREE.MeshBasicMaterial( { map: videoTexture, overdraw: true, side: THREE.DoubleSide } );
+
+    var movieMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            tDiffuse: { type: "t", value: videoTexture }
+        },
+        vertexShader: THREE.live.vertexShader,
+        fragmentShader: THREE.live.fragmentShader,
+        side: THREE.DoubleSide,
+        transparent: true
+    });
+    
+    
+    /*
+    	// create the video element
+	video2 = document.createElement( 'video' );
+	// video.id = 'video';
+	// video.type = ' video/ogg; codecs="theora, vorbis" ';
+	//video.src = "videos/sintel.ogv";
+	video2.crossOrigin = "anonymous";
+	video2.loop = true;
+	video2.defaultPlaybackRate = 0.6;
+	video2.src = "https://dl.dropboxusercontent.com/s/jbabpfxunof0zil/lily2.webm";
+		
+	video2.load(); // must call after setting/changing source
+	video2.play();
+	
+	videoImage2 = document.createElement( 'canvas' );
+	videoImage2.width = 1280;
+	videoImage2.height = 720;
+	
+	//var sizeMultiplier2 = 0.2;
+
+	videoImageContext2 = videoImage2.getContext( '2d' );
+	// background color if no video present
+	videoImageContext2.fillStyle = '#000000';
+	videoImageContext2.fillRect( 0, 0, videoImage2.width, videoImage2.height );
+    
+    videoTexture2 = new THREE.Texture( videoImage2 );
+	videoTexture2.minFilter = THREE.LinearFilter;
+	videoTexture2.magFilter = THREE.LinearFilter;
+	
+	//var movieMaterial = new THREE.MeshBasicMaterial( { map: videoTexture, overdraw: true, side: THREE.DoubleSide } );
+
+    var movieMaterial2 = new THREE.ShaderMaterial({
+        uniforms: {
+            tDiffuse: { type: "t", value: videoTexture2 }
+        },
+        vertexShader: THREE.box_explosion2.vertexShader,
+        fragmentShader: THREE.box_explosion2.fragmentShader,
+        side: THREE.DoubleSide,
+        transparent: true
+    });
+    */
+    
+    var movieMaterials = [
+        //movieMaterial2,
+        movieMaterial,
+    ];
+
+	// the geometry on which the movie will be displayed;
+	// 		movie image will be scaled to fit these dimensions.
+	var movieGeometry = new THREE.PlaneGeometry( Math.floor(videoImage.width * sizeMultiplier), Math.floor(videoImage.height * sizeMultiplier), 4, 4);
+//	var movieScreen = new THREE.Mesh( movieGeometry, new THREE.MeshFaceMaterial(movieMaterials));
+    var movieScreen = new THREE.SceneUtils.createMultiMaterialObject( movieGeometry, movieMaterials);
+	movieScreen.position.set(0,72,0);
+	scene.add(movieScreen);
+	
+	//camera.position.set(0,0,150);
+	//camera.lookAt(look_at);
+}
+
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+}
+
+function update()
+{
+	if ( keyboard.pressed("p") )
+		video.play();
+		
+	if ( keyboard.pressed("space") )
+		video.pause();
+
+	if ( keyboard.pressed("s") ) // stop video
+	{
+		video.pause();
+		video.currentTime = 0;
+	}
+	
+	if ( keyboard.pressed("r") ) // rewind video
+		video.currentTime = 0;
+	
+	controls.update();
+	stats.update();
+}
+
+function render() 
+{	
+	if ( video.readyState === video.HAVE_ENOUGH_DATA ) 
+	{
+		videoImageContext.drawImage( video, 0, 0 );
+		if ( videoTexture ) 
+			videoTexture.needsUpdate = true;
+		
+		/*
+		// CPU image processing example
+	    var videoTransparency = 190;
+	    var imageData = videoImageContext.getImageData(0, 0, videoImage.width, videoImage.height);
+	    for (var i = 0; i < imageData.data.length; i += 4) {
+            imageData.data[i+3] = videoTransparency;
+        }
+        videoImageContext.putImageData(imageData, 0, 0);
+        */
+	}
+	
+	/*
+	if ( video2.readyState === video2.HAVE_ENOUGH_DATA ) 
+	{
+		videoImageContext2.drawImage( video2, 0, 0 );
+		if ( videoTexture2 ) 
+			videoTexture2.needsUpdate = true;
+	}
+	*/
+
+	renderer.render( scene, camera );
+    //composer.render( scene, camera );
+}
+
+</script>
+
+</body>
+</html>

@@ -116,7 +116,8 @@ function init()
 	light.position.set(0,250,0);
 	scene.add(light);
 	// FLOOR
-	var floorTexture = new THREE.ImageUtils.loadTexture( 'images/world_soup.png' );
+	THREE.ImageUtils.crossOrigin = "Anonymous";
+	var floorTexture = THREE.ImageUtils.loadTexture( 'http://i.imgur.com/XWHibMG.png' );
 	//floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
 	//floorTexture.repeat.set( 10, 10 );
 	var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
