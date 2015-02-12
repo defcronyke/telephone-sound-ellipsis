@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<title>WebGL Video Filter Example</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="css/base.css"/>
+</head>
+<body>
+
+<script src="js/three.min.js"></script>
+<script src="js/Detector.js"></script>
+<script src="js/Stats.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/THREEx.KeyboardState.js"></script>
+<script src="js/THREEx.FullScreen.js"></script>
+<script src="js/THREEx.WindowResize.js"></script>
+<script src="js/RenderPass.js"></script>
+<script src="js/MaskPass.js"></script>
+<script src="js/ShaderPass.js"></script>
+<script src="js/CopyShader.js"></script>
+<script src="js/EffectComposer.js"></script>
+
+<script src="shaders/live-aud2.js"></script>
+
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="js/jquery-1.9.1.js"></script>
+<script src="js/jquery-ui.js"></script>
+<link rel=stylesheet href="css/jquery-ui.css" />
+<link rel=stylesheet href="css/info.css"/>
+<script src="js/info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Demo Information">
+Demo controls:
+<ul>
+<li> P: play video
+<li> Space: pause video
+<li> S: stop video
+<li> R: rewind to beginning
+</ul>
+This three.js demo is part of a collection at
+<a href="http://stemkoski.github.io/Three.js/">http://stemkoski.github.io/Three.js/</a>
+</div>
+<!-- ------------------------------------------------------------ -->
+
+<div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
+<script>
+/*
+    Loosely based on:
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+*/
+	
+// MAIN
+
+// standard global variables
+var container, scene, camera, renderer, controls, stats;
+var keyboard = new THREEx.KeyboardState();
+
+// custom global variables
+var video, video2, videoImage, videoImage2, videoImageContext, videoImageContext2, videoTexture, videoTexture2;
+
+var movieMaterial;
+
+var buffSize = 2048;
+var numChannels = 2;    // if you change this you have to change more stuff below
+var audioSliceSize = 32;
+
+var audioDataQueue = [];
+var audioFreqQueue = [];
+var audioFreqSlice = [];
+
+var movieMaterial;
+
+init();
+
+// FUNCTIONS 		
+function init() 
+{
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(0,120,-600);
+	
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias: true, alpha: true} );
+	else
+		renderer = new THREE.CanvasRenderer(); 
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	renderer.setClearColor(0x44eeff, 1);
+	
+	container = document.getElementById( 'ThreeJS' );
+	
+	container.appendChild( renderer.domElement );
+	// CONTROLS
+	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(0,250,0);
+	scene.add(light);
+	// FLOOR
+	THREE.ImageUtils.crossOrigin = "Anonymous";
+	var floorTexture = THREE.ImageUtils.loadTexture('http://i.imgur.com/XWHibMG.png');
+	var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+	var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
+	var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+	floor.position.y = -0.5;
+	floor.rotation.x = Math.PI / 2;
+	scene.add(floor);
+	// SKYBOX/FOG
+	var skyBoxGeometry = new THREE.CubeGeometry( 10000, 10000, 10000 );
+	var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
+	var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+	// scene.add(skyBox);
+	scene.fog = new THREE.FogExp2( 0x9999ff, 0.00025 );
+	
+	
+	///////////
+	// VIDEO //
+	///////////
+	
+	// create the video element
+	video = document.createElement( 'video' );
+	video.crossOrigin = "anonymous";
+	//video.loop = true;
+
+    navigator.getUserMedia_ = (   navigator.getUserMedia
+                               || navigator.webkitGetUserMedia 
+                               || navigator.mozGetUserMedia 
+                               || navigator.msGetUserMedia);
+
+    var createObjectURL = (window.URL || window.webkitURL || {}).createObjectURL || function(stream){};
+    
+        
+    function processVideo(stream) {
+    
+        video.src = createObjectURL(stream);
+
+        video.load(); // must call after setting/changing source
+        video.play();
+        video.muted = true;
+
+        videoImage = document.createElement( 'canvas' );
+        videoImage.width = 640;
+        videoImage.height = 480;
+
+        var sizeMultiplier = 0.5;
+
+        videoImageContext = videoImage.getContext( '2d' );
+        // background color if no video present
+        videoImageContext.fillStyle = '#000000';
+        videoImageContext.fillRect( 0, 0, videoImage.width, videoImage.height );
+
+        videoTexture = new THREE.Texture( videoImage );
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+
+        movieMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                tDiffuse: { type: "t", value: videoTexture },
+                uAudioData: { type: "1fv", value: new Float32Array(audioSliceSize) },
+                uAudioFreq: { type: "1fv", value: new Float32Array(audioSliceSize) }
+            },
+            vertexShader: THREE.live_aud2.vertexShader,
+            fragmentShader: THREE.live_aud2.fragmentShader,
+            side: THREE.DoubleSide,
+            transparent: true
+        });
+        
+        var movieMaterials = [
+            movieMaterial,
+        ];
+
+        // the geometry on which the movie will be displayed;
+        // 		movie image will be scaled to fit these dimensions.
+        var movieGeometry = new THREE.PlaneGeometry( Math.floor(videoImage.width * sizeMultiplier), Math.floor(videoImage.height * sizeMultiplier), 4, 4);
+        var movieScreen = new THREE.SceneUtils.createMultiMaterialObject( movieGeometry, movieMaterials);
+        movieScreen.position.set(0,120,0);
+        scene.add(movieScreen);
+    }
+    
+
+    function processAudio(stream) {
+    
+        window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
+        var audioContext = new AudioContext();      
+        var mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        var recorder = audioContext.createScriptProcessor(buffSize, 2, 2);
+        
+        var analyser = audioContext.createAnalyser();
+        analyser.fftSize = buffSize;
+        
+        recorder.onaudioprocess = function(s) {
+
+            l = s.inputBuffer.getChannelData(0);
+            r = s.inputBuffer.getChannelData(1);
+            
+            var out_l = s.outputBuffer.getChannelData(0);
+            var out_r = s.outputBuffer.getChannelData(1);
+
+            audioDataQueue = [];
+            
+            for (var key in l) {
+                
+                audioDataQueue.push(l[key]);
+                audioDataQueue.push(r[key]);
+                               
+                //out_l[key] = l[key];  // TODO: uncomment these two lines if you want sound output.
+                //out_r[key] = r[key];
+            }
+           
+            movieMaterial.uniforms.uAudioData.value = new Float32Array(audioDataQueue.slice(0, audioSliceSize));
+
+            audioFreqQueue = new Float32Array(analyser.frequencyBinCount);
+            analyser.getFloatFrequencyData(audioFreqQueue);
+            
+            audioFreqSlice = [];
+            for (var i = 0; i < audioSliceSize; i++) {
+                audioFreqSlice.push(1.0 - (Math.abs(audioFreqQueue[i])/128.0));
+            }
+            
+            movieMaterial.uniforms.uAudioFreq.value = new Float32Array(audioFreqSlice);
+            
+            if ( videoTexture ) 
+                videoTexture.needsUpdate = true;
+            
+        };
+        
+        
+        mediaStreamSource.onended = function() {
+            mediaStreamSource.disconnect(analyser);
+            analyser.disconnect(recorder);
+            recorder.disconnect(audioContext.destination);
+        }
+        
+        mediaStreamSource.connect(analyser);
+        analyser.connect(recorder);
+        recorder.connect(audioContext.destination);
+    }
+
+    if ( !! navigator.getUserMedia_) {
+        
+        navigator.getUserMedia_({
+           video: {
+               optional: [
+                   { minWidth: 640 },
+                   { minHeight: 480 }
+               ]
+           },
+           
+           audio: false
+        },
+        function(stream){
+            
+            processVideo(stream);
+            //processAudio(stream);
+            
+            animate();
+            
+            navigator.getUserMedia_({
+               audio: true
+            },
+            function(stream){
+                
+                processAudio(stream);
+                
+            }, 
+            function(error){
+                var msg = "Failed to get a stream due to " + error;
+                console.log(msg);
+            });
+        }, 
+        function(error){
+            var msg = "Failed to get a stream due to " + error;
+            console.log(msg);
+            video.src = "https://dl.dropboxusercontent.com/s/tgvsdgpyqniftkk/stock-explosion.webm";
+        });
+        
+    } else {
+        
+        console.log("Error: navigator.getUserMedia not found.");   
+    }
+}
+
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+}
+
+function update()
+{
+	if ( keyboard.pressed("p") )
+		video.play();
+		
+	if ( keyboard.pressed("space") )
+		video.pause();
+
+	if ( keyboard.pressed("s") ) // stop video
+	{
+		video.pause();
+		video.currentTime = 0;
+	}
+	
+	if ( keyboard.pressed("r") ) // rewind video
+		video.currentTime = 0;
+	
+	controls.update();
+	stats.update();
+}
+
+function render() 
+{	
+	if ( video.readyState === video.HAVE_ENOUGH_DATA ) 
+	{
+		videoImageContext.drawImage( video, 0, 0 );
+		if ( videoTexture ) 
+			videoTexture.needsUpdate = true;
+		
+		/*
+		// CPU image processing example
+	    var videoTransparency = 190;
+	    var imageData = videoImageContext.getImageData(0, 0, videoImage.width, videoImage.height);
+	    for (var i = 0; i < imageData.data.length; i += 4) {
+            imageData.data[i+3] = videoTransparency;
+        }
+        videoImageContext.putImageData(imageData, 0, 0);
+        */
+	}
+
+	renderer.render( scene, camera );
+}
+
+</script>
+
+</body>
+</html>
+

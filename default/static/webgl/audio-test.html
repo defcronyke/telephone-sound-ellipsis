@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title> Audio Test </title>
+
+<script src="http://code.stephenmorley.org/javascript/queues/Queue.js"></script>
+
+<script>
+
+var audioDataQueue = new Queue();
+
+function gotStream(stream) {
+    
+    window.AudioContext = window.AudioContext || window.webkitAudioContext || window.mozAudioContext || window.msAudioContext;
+    var audioContext = new AudioContext();
+    
+    var mediaStreamSource = audioContext.createMediaStreamSource(stream);
+    
+    var biquadFilter = audioContext.createBiquadFilter();
+      biquadFilter.type = "lowshelf";
+      biquadFilter.frequency.value = 1000;
+      biquadFilter.gain.value = 1.5;
+    
+    var buffSize = 2048;
+    var recorder = audioContext.createScriptProcessor(buffSize, 2, 2);
+    
+    recorder.onaudioprocess = function(s) {
+    
+        var l = s.inputBuffer.getChannelData(0);
+        var r = s.inputBuffer.getChannelData(1);
+    
+        //console.log("l: "+JSON.stringify(l, null, 4) + "r: "+JSON.stringify(r, null, 4));
+    
+    };
+    
+    mediaStreamSource.connect(biquadFilter);
+    biquadFilter.connect(recorder);
+    
+    recorder.connect(audioContext.destination);
+}
+
+navigator.getUserMedia_ = (   navigator.getUserMedia
+                               || navigator.webkitGetUserMedia 
+                               || navigator.mozGetUserMedia 
+                               || navigator.msGetUserMedia);
+
+if ( !! navigator.getUserMedia_) {
+
+navigator.getUserMedia_({
+    audio: true
+}, gotStream, 
+
+function(error) {
+    console.log("Error getting audio stream from microphone: " + error);
+});
+
+}
+
+</script>
+
+</head>
+
+<body>
+</body>
+
+</html>
