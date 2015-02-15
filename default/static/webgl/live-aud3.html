@@ -246,7 +246,7 @@ function init()
             mediaStreamSource.disconnect(analyser);
             analyser.disconnect(recorder);
             recorder.disconnect(audioContext.destination);
-        }
+        };
         
         mediaStreamSource.connect(analyser);
         analyser.connect(recorder);
