@@ -159,7 +159,8 @@ function init() {
 
 function processVideo(stream) {
 
-  video.src = createObjectURL(stream);
+  // video.src = createObjectURL(stream);
+  video.srcObject = stream;
 
   video.load();
 
