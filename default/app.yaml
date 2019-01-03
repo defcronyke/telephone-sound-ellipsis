@@ -1,6 +1,6 @@
 #application: unique-result-840
 #version: 1
-module: default
+service: default
 runtime: go
 api_version: go1
 
